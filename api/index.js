@@ -12,12 +12,12 @@ export default async function handler(req, res) {
 
   try {
     const replicate = new Replicate({
-      auth: process.env.REPLICATE_API_TOKEN, 
+      auth: process.env.REPLICATE_API_TOKEN,
     });
 
     const input = {
       prompt: prompt,
-      num_outputs: 1,
+      num_outputs: 4,
       aspect_ratio: "16:9",
       output_format: "png",
       guidance_scale: 3.5,
@@ -25,25 +25,31 @@ export default async function handler(req, res) {
       num_inference_steps: 50
     };
 
-    const output = await replicate.run(
-      "justmalhar/flux-thumbnails-v2:be1f9d9a43c18c9c0d8c9024d285aa5fa343914648a7fe35be291ed04a9dfeb0",
-      { input }
-    );
+    // **1️⃣ Start the prediction**
+    const prediction = await replicate.predictions.create({
+      version: "be1f9d9a43c18c9c0d8c9024d285aa5fa343914648a7fe35be291ed04a9dfeb0",
+      input
+    });
 
-    if (!output) {
-      throw new Error("No response from Replicate API");
+    console.log("🔍 Replicate Prediction Response:", prediction);
+
+    // **2️⃣ Wait for completion**
+    while (prediction.status !== "succeeded" && prediction.status !== "failed") {
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      const updatedPrediction = await replicate.predictions.get(prediction.id);
+      prediction.status = updatedPrediction.status;
+      prediction.output = updatedPrediction.output;
     }
 
-    res.status(200).json({ thumbnails: output });
+    // **3️⃣ Return the thumbnails**
+    if (prediction.status === "succeeded" && prediction.output) {
+      res.status(200).json({ thumbnails: prediction.output });
+    } else {
+      res.status(500).json({ error: "Failed to generate thumbnails. Replicate API Error." });
+    }
+
   } catch (error) {
-    console.error("Replicate API Error:", error);
-    
-    if (error.response) {
-      return res.status(error.response.status).json({ 
-        error: `Replicate API Error: ${error.response.statusText}`
-      });
-    }
-
-    return res.status(500).json({ error: "Failed to generate thumbnails. Please try again later." });
+    console.error("❌ Replicate API Error:", error);
+    res.status(500).json({ error: "Failed to generate thumbnails." });
   }
 }
