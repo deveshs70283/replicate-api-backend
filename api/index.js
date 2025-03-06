@@ -30,9 +30,20 @@ export default async function handler(req, res) {
       { input }
     );
 
+    if (!output) {
+      throw new Error("No response from Replicate API");
+    }
+
     res.status(200).json({ thumbnails: output });
   } catch (error) {
     console.error("Replicate API Error:", error);
-    res.status(500).json({ error: "Failed to generate thumbnails" });
+    
+    if (error.response) {
+      return res.status(error.response.status).json({ 
+        error: `Replicate API Error: ${error.response.statusText}`
+      });
+    }
+
+    return res.status(500).json({ error: "Failed to generate thumbnails. Please try again later." });
   }
 }
