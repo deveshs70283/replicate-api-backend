@@ -17,7 +17,7 @@ export default async function handler(req, res) {
 
     const input = {
       prompt: prompt,
-      num_outputs: 4,
+      num_outputs: 1,
       aspect_ratio: "16:9",
       output_format: "png",
       guidance_scale: 3.5,
