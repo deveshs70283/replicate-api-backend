@@ -1,53 +1,45 @@
 import Replicate from "replicate";
+import { writeFile } from "node:fs/promises";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const { prompt } = req.body;
-  if (!prompt) {
-    return res.status(400).json({ error: "Prompt is required" });
+  const { prompt, image, mask } = req.body;
+  if (!prompt || !image || !mask) {
+    return res.status(400).json({ error: "Prompt, image, and mask are required." });
   }
 
   try {
-    const replicate = new Replicate({
-      auth: process.env.REPLICATE_API_TOKEN,
-    });
+    const replicate = new Replicate();
 
     const input = {
-      prompt: prompt,
-      num_outputs: 1,
+      prompt,
+      image,      // Base64 encoded image or URL
+      mask,       // Base64 encoded mask or URL
       aspect_ratio: "16:9",
-      output_format: "png",
       guidance_scale: 3.5,
-      output_quality: 100,
-      num_inference_steps: 50
+      output_quality: 90
     };
 
-    // **1️⃣ Start the prediction**
-    const prediction = await replicate.predictions.create({
-      version: "be1f9d9a43c18c9c0d8c9024d285aa5fa343914648a7fe35be291ed04a9dfeb0",
-      input
-    });
+    // Run the model with the given inputs
+    const output = await replicate.run(
+      "justmalhar/flux-thumbnails-v3:f0db143a6467cfb2b6b1408b6454d120061f35102b1f660af23ce4d91f7940db",
+      { input }
+    );
 
-    console.log("🔍 Replicate Prediction Response:", prediction);
+    console.log("🖼️ Generated Output:", output);
 
-    // **2️⃣ Wait for completion**
-    while (prediction.status !== "succeeded" && prediction.status !== "failed") {
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
-      const updatedPrediction = await replicate.predictions.get(prediction.id);
-      prediction.status = updatedPrediction.status;
-      prediction.output = updatedPrediction.output;
+    // Save the output files locally (optional)
+    const outputFiles = [];
+    for (const [index, item] of Object.entries(output)) {
+      const filePath = `output_${index}.webp`;
+      await writeFile(filePath, item);
+      outputFiles.push(filePath);
     }
 
-    // **3️⃣ Return the thumbnails**
-    if (prediction.status === "succeeded" && prediction.output) {
-      res.status(200).json({ thumbnails: prediction.output });
-    } else {
-      res.status(500).json({ error: "Failed to generate thumbnails. Replicate API Error." });
-    }
-
+    res.status(200).json({ output });
   } catch (error) {
     console.error("❌ Replicate API Error:", error);
     res.status(500).json({ error: "Failed to generate thumbnails." });
